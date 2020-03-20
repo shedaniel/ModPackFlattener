@@ -22,31 +22,33 @@ import java.util.zip.ZipInputStream
 import kotlin.math.log10
 import kotlin.math.pow
 
-
-val json = Json(JsonConfiguration.Stable.copy(ignoreUnknownKeys = true, isLenient = true))
-val root = File(System.getProperty("user.dir"))
-val tmp = File(root, ".removejij")
-val flattenedMods = File(root, "flattenedMods")
-val warnings = mutableListOf<String>()
-val outerUUID = UUID.randomUUID().toString()
+private val json = Json(JsonConfiguration.Stable.copy(ignoreUnknownKeys = true, isLenient = true))
 
 fun main() {
+    val root = File(System.getProperty("user.dir"))
+    flatten(root, File(root, ".removejij"), File(root, "flattenedMods"))
+}
+
+fun flatten(mods: File, tmp: File, flattenedMods: File) {
+    val warnings = mutableListOf<String>()
+    val outerUUID = UUID.randomUUID().toString()
     tmp.deleteRecursively()
     flattenedMods.deleteRecursively()
     if (flattenedMods.exists())
         throw FileAlreadyExistsException(flattenedMods)
     flattenedMods.mkdirs()
     var ogSize = 0L
-    root.listFiles()!!
+    mods.listFiles()!!
         .forEach { file ->
             if (file.isFile && file.name.endsWith(".jar")) {
-                if (isSelf(file.inputStream())) return@forEach
+                if (isExcluding(file.inputStream())) return@forEach
                 ogSize += file.length()
                 countJar(
                     file.lastModified(),
                     file.name,
                     file.inputStream(),
-                    true
+                    true,
+                    tmp, outerUUID
                 )
                 val modId = getModId(file.inputStream()) ?: "invalid"
                 val toFile = File(File(tmp, modId), file.name.split("/").last())
@@ -65,19 +67,19 @@ fun main() {
         if (modIdFolder.isDirectory) {
             if (modIdFolder.name == "invalid") {
                 modIdFolder.listFiles()!!.forEach { file ->
-                    file.copyTo(File(flattenedMods, file.name.stripInfoName()), false)
+                    file.copyTo(File(flattenedMods, file.name.stripInfoName(outerUUID)), false)
                 }
             } else {
                 val firstOrNull = modIdFolder.listFiles()!!
                     .firstOrNull {
-                        it.isFile && it.name.stripInfoName().endsWith(".jar") && File(
-                            root,
-                            it.name.stripInfoName()
+                        it.isFile && it.name.stripInfoName(outerUUID).endsWith(".jar") && File(
+                            mods,
+                            it.name.stripInfoName(outerUUID)
                         ).exists()
                     }
                 if (firstOrNull != null) {
-                    firstOrNull.copyTo(File(flattenedMods, firstOrNull.name.stripInfoName()), false)
-                    println("[INFO] Selected ${firstOrNull.stripAndDepthName()} from ${modIdFolder.name} as depth 0 mod")
+                    firstOrNull.copyTo(File(flattenedMods, firstOrNull.name.stripInfoName(outerUUID)), false)
+                    println("[INFO] Selected ${firstOrNull.stripAndDepthName(outerUUID)} from ${modIdFolder.name} as depth 0 mod")
                 } else {
                     val semverMap = mutableMapOf<File, Pair<String?, SemanticVersion?>>()
                     modIdFolder.listFiles()!!.forEach { file ->
@@ -102,15 +104,27 @@ fun main() {
                     if (semverMap.isEmpty()) {
                         println("[ERROR] ${modIdFolder.name} has no entries!")
                     } else if (semverMap.size > 1 && semverMap.any { it.value.first == null }) {
-                        println("[WARN] ${modIdFolder.name} has an invalid version: ${semverMap.filterValues { it.first == null }.entries.joinToString { it.key.stripAndDepthName() }}".also {
+                        println("[WARN] ${modIdFolder.name} has an invalid version: ${semverMap.filterValues { it.first == null }.entries.joinToString {
+                            it.key.stripAndDepthName(
+                                outerUUID
+                            )
+                        }}".also {
                             warnings.add(it)
                         })
                     } else if (semverMap.size > 1 && semverMap.any { it.value.second == null }) {
-                        println("[WARN] ${modIdFolder.name} has a non-semantic version: ${semverMap.filterValues { it.first != null && it.second == null }.entries.joinToString { "${it.key.stripAndDepthName()} [${it.value.first}]" }}".also {
+                        println("[WARN] ${modIdFolder.name} has a non-semantic version: ${semverMap.filterValues { it.first != null && it.second == null }.entries.joinToString {
+                            "${it.key.stripAndDepthName(
+                                outerUUID
+                            )} [${it.value.first}]"
+                        }}".also {
                             warnings.add(it)
                         })
                     } else if (sortedGroupBy.values.last().size > 1) {
-                        println("[WARN] ${modIdFolder.name} have duplicate entries: ${sortedGroupBy.entries.first { it.value.size > 1 }.value.joinToString { it.stripAndDepthName() }}".also {
+                        println("[WARN] ${modIdFolder.name} have duplicate entries: ${sortedGroupBy.entries.first { it.value.size > 1 }.value.joinToString {
+                            it.stripAndDepthName(
+                                outerUUID
+                            )
+                        }}".also {
                             warnings.add(it)
                         })
                     } else {
@@ -119,19 +133,19 @@ fun main() {
                         val against = semverMap.entries.toMutableList()
                             .apply { removeIf { it.value.second == entry.value.second } }.distinctBy { it.value.second }
                         if (against.isEmpty())
-                            println("[INFO] Selected ${entry.key.stripAndDepthName()} (${entry.value.second}) from ${modIdFolder.name} as the only version")
-                        else println("[INFO] Selected ${entry.key.stripAndDepthName()} (${entry.value.second ?: entry.value.first}) from ${modIdFolder.name} as the latest version against ${against.joinToString { it.value.second?.friendlyString ?: (entry.value.first ?: "null") }}")
-                        entry.key.copyTo(File(flattenedMods, entry.key.name.stripInfoName()), false)
+                            println("[INFO] Selected ${entry.key.stripAndDepthName(outerUUID)} (${entry.value.second}) from ${modIdFolder.name} as the only version")
+                        else println("[INFO] Selected ${entry.key.stripAndDepthName(outerUUID)} (${entry.value.second ?: entry.value.first}) from ${modIdFolder.name} as the latest version against ${against.joinToString { it.value.second?.friendlyString ?: (entry.value.first ?: "null") }}")
+                        entry.key.copyTo(File(flattenedMods, entry.key.name.stripInfoName(outerUUID)), false)
                     }
                     if (semverMap.size > 1 && !noForceSelect) {
                         val order = ConcurrentHashMap<String?, File>()
-                        semverMap.entries.groupBy { it.key.getDepth() }
+                        semverMap.entries.groupBy { it.key.getDepth(outerUUID) }
                             .minBy { it.key }!!.value.forEach { order[it.value.first] = it.key }
                         val entry = order.values.first()
-                        println("[WARN] Forcefully selected ${entry.stripAndDepthName()} from ${modIdFolder.name}".also {
+                        println("[WARN] Forcefully selected ${entry.stripAndDepthName(outerUUID)} from ${modIdFolder.name}".also {
                             warnings.add(it)
                         })
-                        entry.copyTo(File(flattenedMods, entry.name.stripInfoName()), false)
+                        entry.copyTo(File(flattenedMods, entry.name.stripInfoName(outerUUID)), false)
                     }
                 }
             }
@@ -149,21 +163,22 @@ fun main() {
     println("Flattened ${ogSize.readableFileSize()} to ${newSize.readableFileSize()}")
 }
 
-fun String.stripInfoName(): String {
+fun String.stripInfoName(outerUUID: String): String {
     val indexOf = indexOf(outerUUID)
     if (indexOf < 0) return this
     return substring(indexOf + outerUUID.length + 1)
 }
 
-fun String.onlyInfoName(): String {
+fun String.onlyInfoName(outerUUID: String): String {
     val indexOf = indexOf(outerUUID)
     if (indexOf < 0) return this
     return substring(0, indexOf)
 }
 
-fun File.getDepth(): Int = StringUtils.countMatches(name.onlyInfoName(), " -> ")
+fun File.getDepth(outerUUID: String): Int = StringUtils.countMatches(name.onlyInfoName(outerUUID), " -> ")
 
-fun File.stripAndDepthName(): String = "${name.stripInfoName()} (Depth ${getDepth()})"
+fun File.stripAndDepthName(outerUUID: String): String =
+    "${name.stripInfoName(outerUUID)} (Depth ${getDepth(outerUUID)})"
 
 fun Long.readableFileSize(): String {
     if (this <= 0) return "0"
@@ -222,7 +237,7 @@ fun stripJars(text: String): String {
     return JsonObject(newObject).toString()
 }
 
-fun countJar(time: Long, modName: String, inputStream: InputStream, outer: Boolean) {
+fun countJar(time: Long, modName: String, inputStream: InputStream, outer: Boolean, tmp: File, outerUUID: String) {
     try {
         val zip = ZipInputStream(inputStream)
         while (true) {
@@ -233,7 +248,7 @@ fun countJar(time: Long, modName: String, inputStream: InputStream, outer: Boole
                     entry.time,
                     modName + " -> " + entry.name.split("/").last(),
                     bytes.clone().inputStream(),
-                    true
+                    true, tmp, outerUUID
                 )
                 val modId = getModId(bytes.clone().inputStream()) ?: "invalid"
                 val file = File(
@@ -284,7 +299,7 @@ fun getModId(inputStream: InputStream): String? {
     return null
 }
 
-fun isSelf(inputStream: InputStream): Boolean {
+fun isExcluding(inputStream: InputStream): Boolean {
     val zip = ZipInputStream(inputStream)
     while (true) {
         val entry = zip.nextEntry ?: break
