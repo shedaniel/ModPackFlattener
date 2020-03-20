@@ -1,10 +1,9 @@
 package me.shedaniel.modflattener
 
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonConfiguration
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
+import blue.endless.jankson.Jankson
+import blue.endless.jankson.JsonObject
+import com.google.gson.Gson
+import com.google.gson.JsonParser
 import net.fabricmc.loader.api.SemanticVersion
 import net.fabricmc.loader.util.version.VersionParsingException
 import org.apache.commons.lang3.StringUtils
@@ -22,7 +21,7 @@ import java.util.zip.ZipInputStream
 import kotlin.math.log10
 import kotlin.math.pow
 
-private val json = Json(JsonConfiguration.Stable.copy(ignoreUnknownKeys = true, isLenient = true))
+val jankson: Jankson = Jankson.builder().build()!!
 
 fun main() {
     val root = File(System.getProperty("user.dir"))
@@ -50,7 +49,7 @@ fun flatten(mods: File, tmp: File, flattenedMods: File) {
                     true,
                     tmp, outerUUID
                 )
-                val modId = getModId(file.inputStream()) ?: "invalid"
+                val modId = getModId(file.name, file.inputStream()) ?: "invalid"
                 val toFile = File(File(tmp, modId), file.name.split("/").last())
                 toFile.parentFile.mkdirs()
                 file.copyTo(toFile)
@@ -83,7 +82,7 @@ fun flatten(mods: File, tmp: File, flattenedMods: File) {
                 } else {
                     val semverMap = mutableMapOf<File, Pair<String?, SemanticVersion?>>()
                     modIdFolder.listFiles()!!.forEach { file ->
-                        val modVersion = getModVersion(file.inputStream())
+                        val modVersion = getModVersion(file.name.stripInfoName(outerUUID), file.inputStream())
                         semverMap[file] = Pair(modVersion, modVersion?.let {
                             try {
                                 SemanticVersion.parse(it)
@@ -228,13 +227,9 @@ fun clearJIJ(file: File) {
 }
 
 fun stripJars(text: String): String {
-    val newObject = mutableMapOf<String, JsonElement>()
-    val jsonObject = json.parseJson(text).jsonObject
-    jsonObject.forEach { key, element ->
-        if (key != "jars")
-            newObject[key] = element
-    }
-    return JsonObject(newObject).toString()
+    val jsonObject = JsonParser.parseString(text).asJsonObject
+    jsonObject.remove("jars")
+    return Gson().toJson(jsonObject)
 }
 
 fun countJar(time: Long, modName: String, inputStream: InputStream, outer: Boolean, tmp: File, outerUUID: String) {
@@ -250,7 +245,7 @@ fun countJar(time: Long, modName: String, inputStream: InputStream, outer: Boole
                     bytes.clone().inputStream(),
                     true, tmp, outerUUID
                 )
-                val modId = getModId(bytes.clone().inputStream()) ?: "invalid"
+                val modId = getModId(modName, bytes.clone().inputStream()) ?: "invalid"
                 val file = File(
                     File(tmp, modId),
                     "$time ${entry.time} " + (if (outer) "$modName -> $outerUUID " else "") + entry.name.split("/")
@@ -266,35 +261,44 @@ fun countJar(time: Long, modName: String, inputStream: InputStream, outer: Boole
 }
 
 
-fun getModVersion(inputStream: InputStream): String? {
+fun getModVersion(modName: String, inputStream: InputStream): String? {
     val zip = ZipInputStream(inputStream)
     while (true) {
         val entry = zip.nextEntry ?: break
         if (entry.name == "fabric.mod.json")
-            return getModVersionFromJson(zip)
+            return getModVersionFromJson(modName, zip)
     }
     return null
 }
 
-fun getModVersionFromJson(inputStream: InputStream): String? {
+fun getModVersionFromJson(modName: String, inputStream: InputStream): String? {
     try {
-        val map = json.parse(
-            FabricModInfo.serializer(),
+        return JsonParser.parseString(
             inputStream.reader(Charset.defaultCharset()).readText()
-        )
-        return map.version
+        ).asJsonObject["version"].asJsonPrimitive.asString
     } catch (t: Throwable) {
-        t.printStackTrace()
+        RuntimeException("Failed to read fabric.mod.json from $modName", t).printStackTrace()
     }
     return null
 }
 
-fun getModId(inputStream: InputStream): String? {
+fun getModId(modName: String, inputStream: InputStream): String? {
     val zip = ZipInputStream(inputStream)
     while (true) {
         val entry = zip.nextEntry ?: break
         if (entry.name == "fabric.mod.json")
-            return getModIdFromJson(zip)
+            return getModIdFromJson(modName, zip)
+    }
+    return null
+}
+
+fun getModIdFromJson(modName: String, inputStream: InputStream): String? {
+    try {
+        return JsonParser.parseString(
+            inputStream.reader(Charset.defaultCharset()).readText()
+        ).asJsonObject["id"].asJsonPrimitive.asString
+    } catch (t: Throwable) {
+        RuntimeException("Failed to read fabric.mod.json from $modName", t).printStackTrace()
     }
     return null
 }
@@ -308,20 +312,3 @@ fun isExcluding(inputStream: InputStream): Boolean {
     }
     return false
 }
-
-
-fun getModIdFromJson(inputStream: InputStream): String? {
-    try {
-        val map = json.parse(
-            FabricModInfo.serializer(),
-            inputStream.reader(Charset.defaultCharset()).readText()
-        )
-        return map.id
-    } catch (t: Throwable) {
-        t.printStackTrace()
-    }
-    return null
-}
-
-@Serializable
-data class FabricModInfo(val id: String? = null, val version: String? = null)
