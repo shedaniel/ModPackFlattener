@@ -40,7 +40,7 @@ fun main() {
     root.listFiles()!!
         .forEach { file ->
             if (file.isFile && file.name.endsWith(".jar")) {
-                if (getModId(file.inputStream()) == "fabricloader") return@forEach
+                if (isSelf(file.inputStream())) return@forEach
                 ogSize += file.length()
                 countJar(
                     file.lastModified(),
@@ -271,6 +271,17 @@ fun getModId(inputStream: InputStream): String? {
     }
     return null
 }
+
+fun isSelf(inputStream: InputStream): Boolean {
+    val zip = ZipInputStream(inputStream)
+    while (true) {
+        val entry = zip.nextEntry ?: break
+        if (entry.name == ".modpacks-flatter-exclude")
+            return true
+    }
+    return false
+}
+
 
 fun getModIdFromJson(inputStream: InputStream): String? {
     try {

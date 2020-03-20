@@ -9,7 +9,7 @@ sourceCompatibility = targetCompatibility = 1.8
 
 group = "me.shedaniel"
 archivesBaseName = "modpacks-flattener"
-version = "0.1.0"
+version = "0.1.1"
 
 repositories {
     jcenter()
@@ -32,6 +32,7 @@ compileKotlin {
 }
 
 jar {
+    from ".modpacks-flatter-exclude"
     manifest {
         attributes(
                 'Main-Class': 'me.shedaniel.modflattener.MainKt'
