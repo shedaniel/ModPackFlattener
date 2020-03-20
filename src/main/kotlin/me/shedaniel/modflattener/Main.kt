@@ -1,7 +1,5 @@
 package me.shedaniel.modflattener
 
-import blue.endless.jankson.Jankson
-import blue.endless.jankson.JsonObject
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import net.fabricmc.loader.api.SemanticVersion
@@ -20,8 +18,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipInputStream
 import kotlin.math.log10
 import kotlin.math.pow
-
-val jankson: Jankson = Jankson.builder().build()!!
 
 fun main() {
     val root = File(System.getProperty("user.dir"))
