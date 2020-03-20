@@ -26,7 +26,7 @@ import kotlin.math.pow
 val json = Json(JsonConfiguration.Stable.copy(ignoreUnknownKeys = true))
 val root = File(System.getProperty("user.dir"))
 val tmp = File(root, ".removejij")
-val flattenedMods = File(root, "me.shedaniel.modflattener.getFlattenedMods")
+val flattenedMods = File(root, "flattenedMods")
 val warnings = mutableListOf<String>()
 val outerUUID = UUID.randomUUID().toString()
 
@@ -40,6 +40,7 @@ fun main() {
     root.listFiles()!!
         .forEach { file ->
             if (file.isFile && file.name.endsWith(".jar")) {
+                if (getModId(file.inputStream()) == "fabricloader") return@forEach
                 ogSize += file.length()
                 countJar(
                     file.lastModified(),
