@@ -23,7 +23,7 @@ import kotlin.math.log10
 import kotlin.math.pow
 
 
-val json = Json(JsonConfiguration.Stable.copy(ignoreUnknownKeys = true))
+val json = Json(JsonConfiguration.Stable.copy(ignoreUnknownKeys = true, isLenient = true))
 val root = File(System.getProperty("user.dir"))
 val tmp = File(root, ".removejij")
 val flattenedMods = File(root, "flattenedMods")
