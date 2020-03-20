@@ -9,7 +9,7 @@ sourceCompatibility = targetCompatibility = 1.8
 
 group = "me.shedaniel"
 archivesBaseName = "modpacks-flattener"
-version = "0.1.3"
+version = "0.1.4"
 
 repositories {
     jcenter()

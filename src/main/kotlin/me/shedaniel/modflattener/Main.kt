@@ -142,7 +142,7 @@ fun main() {
         ?.sumByDouble { it.length().toDouble() }?.toLong() ?: 0L
     if (warnings.isNotEmpty()) {
         println()
-        println("You have ${warnings.size} me.shedaniel.modflattener.getWarnings:")
+        println("You have ${warnings.size} warnings:")
         warnings.forEach { println(" - ${it.replaceFirst("[WARN] ", "")}") }
     }
     println()
