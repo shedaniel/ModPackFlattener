@@ -146,6 +146,15 @@ fun flatten(mods: File, tmp: File, flattenedMods: File) {
             }
         } else throw AssertionError()
     }
+    println()
+    println("Mod Duplication Stats (Only Show 20 Top Results)")
+    val countMap = mutableMapOf<String, Int>()
+    tmp.listFiles()!!.forEach { modIdFolder ->
+        if (modIdFolder.isDirectory) {
+            countMap[modIdFolder.name] = modIdFolder.listFiles()!!.size
+        } else throw AssertionError()
+    }
+    countMap.entries.sortedByDescending { it.value }.take(20).forEach { println(" - ${it.key} x${it.value}") }
     tmp.deleteRecursively()
     val newSize = flattenedMods.listFiles()?.filter { it.isFile && it.name.endsWith(".jar") }
         ?.sumByDouble { it.length().toDouble() }?.toLong() ?: 0L
