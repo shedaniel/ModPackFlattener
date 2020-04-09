@@ -26,7 +26,7 @@ fun main() {
 
 fun flatten(mods: File, tmp: File, flattenedMods: File) {
     val warnings = mutableListOf<String>()
-    val outerUUID = UUID.randomUUID().toString()
+    val outerUUID = generateRandomString(10)
     tmp.deleteRecursively()
     flattenedMods.deleteRecursively()
     if (flattenedMods.exists())
@@ -167,10 +167,18 @@ fun flatten(mods: File, tmp: File, flattenedMods: File) {
     println("Flattened ${ogSize.readableFileSize()} to ${newSize.readableFileSize()}")
 }
 
+fun generateRandomString(range: Int): String {
+    val allowedChar = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456789"
+    val builder = StringBuilder()
+    for (i in 1..range)
+        builder.append(allowedChar.random())
+    return builder.toString()
+}
+
 fun String.stripInfoName(outerUUID: String): String {
     val indexOf = indexOf(outerUUID)
     if (indexOf < 0) return this
-    return substring(indexOf + outerUUID.length + 1)
+    return substring(indexOf + outerUUID.length)
 }
 
 fun String.onlyInfoName(outerUUID: String): String {
@@ -179,7 +187,7 @@ fun String.onlyInfoName(outerUUID: String): String {
     return substring(0, indexOf)
 }
 
-fun File.getDepth(outerUUID: String): Int = StringUtils.countMatches(name.onlyInfoName(outerUUID), " -> ")
+fun File.getDepth(outerUUID: String): Int = StringUtils.countMatches(name.onlyInfoName(outerUUID), "->")
 
 fun File.stripAndDepthName(outerUUID: String): String =
     "${name.stripInfoName(outerUUID)} (Depth ${getDepth(outerUUID)})"
@@ -246,14 +254,14 @@ fun countJar(time: Long, modName: String, inputStream: InputStream, outer: Boole
                 val bytes = zip.readBytes()
                 countJar(
                     entry.time,
-                    modName + " -> " + entry.name.split("/").last(),
+                    modName + "->" + entry.name.split("/").last(),
                     bytes.clone().inputStream(),
                     true, tmp, outerUUID
                 )
                 val modId = getModId(modName, bytes.clone().inputStream()) ?: "invalid"
                 val file = File(
                     File(tmp, modId),
-                    "$time ${entry.time} " + (if (outer) "$modName -> $outerUUID " else "") + entry.name.split("/")
+                    (if (outer) "$modName->$outerUUID" else "") + entry.name.split("/")
                         .last()
                 )
                 file.parentFile.mkdirs()
