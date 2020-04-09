@@ -19,6 +19,8 @@ import java.util.zip.ZipInputStream
 import kotlin.math.log10
 import kotlin.math.pow
 
+val arrow = generateRandomString(5)
+
 fun main() {
     val root = File(System.getProperty("user.dir"))
     flatten(root, File(root, ".removejij"), File(root, "flattenedMods"))
@@ -26,7 +28,7 @@ fun main() {
 
 fun flatten(mods: File, tmp: File, flattenedMods: File) {
     val warnings = mutableListOf<String>()
-    val outerUUID = generateRandomString(10)
+    val outerUUID = generateRandomString(7)
     tmp.deleteRecursively()
     flattenedMods.deleteRecursively()
     if (flattenedMods.exists())
@@ -36,19 +38,23 @@ fun flatten(mods: File, tmp: File, flattenedMods: File) {
     mods.listFiles()!!
         .forEach { file ->
             if (file.isFile && file.name.endsWith(".jar")) {
-                if (isExcluding(file.inputStream())) return@forEach
+                if (file.inputStream().use { isExcluding(it) }) return@forEach
                 ogSize += file.length()
-                countJar(
-                    file.lastModified(),
-                    file.name,
-                    file.inputStream(),
-                    true,
-                    tmp, outerUUID
-                )
-                val modId = getModId(file.name, file.inputStream()) ?: "invalid"
-                val toFile = File(File(tmp, modId), file.name.split("/").last())
-                toFile.parentFile.mkdirs()
-                file.copyTo(toFile)
+                file.inputStream().use {
+                    countJar(
+                        file.lastModified(),
+                        file.name,
+                        it,
+                        true,
+                        tmp, outerUUID
+                    )
+                }
+                file.inputStream().use {
+                    val modId = getModId(file.name, it) ?: "invalid"
+                    val toFile = File(File(tmp, modId), file.name.split("/").last())
+                    toFile.parentFile.mkdirs()
+                    file.copyTo(toFile)
+                }
             }
         }
     tmp.listFiles()!!.forEach { modIdFolder ->
@@ -78,7 +84,8 @@ fun flatten(mods: File, tmp: File, flattenedMods: File) {
                 } else {
                     val semverMap = mutableMapOf<File, Pair<String?, SemanticVersion?>>()
                     modIdFolder.listFiles()!!.forEach { file ->
-                        val modVersion = getModVersion(file.name.stripInfoName(outerUUID), file.inputStream())
+                        val modVersion =
+                            file.inputStream().use { getModVersion(file.name.stripInfoName(outerUUID), it) }
                         semverMap[file] = Pair(modVersion, modVersion?.let {
                             try {
                                 SemanticVersion.parse(it)
@@ -187,7 +194,7 @@ fun String.onlyInfoName(outerUUID: String): String {
     return substring(0, indexOf)
 }
 
-fun File.getDepth(outerUUID: String): Int = StringUtils.countMatches(name.onlyInfoName(outerUUID), "->")
+fun File.getDepth(outerUUID: String): Int = StringUtils.countMatches(name.onlyInfoName(outerUUID), arrow)
 
 fun File.stripAndDepthName(outerUUID: String): String =
     "${name.stripInfoName(outerUUID)} (Depth ${getDepth(outerUUID)})"
@@ -202,11 +209,13 @@ fun Long.readableFileSize(): String {
 fun clearJIJ(file: File) {
     try {
         val jars = mutableListOf<String>()
-        val zip = ZipInputStream(file.inputStream())
-        while (true) {
-            val entry = zip.nextEntry ?: break
-            if (!entry.isDirectory && entry.name.endsWith(".jar")) {
-                jars.add(entry.name)
+        file.inputStream().use {
+            val zip = ZipInputStream(it)
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (!entry.isDirectory && entry.name.endsWith(".jar")) {
+                    jars.add(entry.name)
+                }
             }
         }
 
@@ -222,12 +231,12 @@ fun clearJIJ(file: File) {
             val fabricModJson = zipfs.getPath("fabric.mod.json")
             try {
                 val newText = stripJars(
-                    Files.newBufferedReader(fabricModJson).readText()
+                    Files.newBufferedReader(fabricModJson).use { it.readText() }
                 )
                 Files.delete(fabricModJson)
-                val writer = Files.newOutputStream(fabricModJson).bufferedWriter()
-                writer.write(newText)
-                writer.close()
+                Files.newOutputStream(fabricModJson).bufferedWriter().use {
+                    it.write(newText)
+                }
             } catch (ignored: NoSuchFileException) {
             } catch (t: Throwable) {
                 throw RuntimeException("Failed to edit fabric.mod.json for $file", t)
@@ -252,27 +261,32 @@ fun countJar(time: Long, modName: String, inputStream: InputStream, outer: Boole
             val entry = zip.nextEntry ?: break
             if (!entry.isDirectory && entry.name.endsWith(".jar")) {
                 val bytes = zip.readBytes()
-                countJar(
-                    entry.time,
-                    modName + "->" + entry.name.split("/").last(),
-                    bytes.clone().inputStream(),
-                    true, tmp, outerUUID
-                )
-                val modId = getModId(modName, bytes.clone().inputStream()) ?: "invalid"
+                bytes.clone().inputStream().use {
+                    countJar(
+                        entry.time,
+                        modName + arrow + entry.name.split("/").last(),
+                        it,
+                        true, tmp, outerUUID
+                    )
+                }
+                val modId = bytes.clone().inputStream().use { getModId(modName, it) ?: "invalid" }
                 val file = File(
                     File(tmp, modId),
-                    (if (outer) "$modName->$outerUUID" else "") + entry.name.split("/")
+                    (if (outer) "$modName${arrow}$outerUUID" else "") + entry.name.split("/")
                         .last()
                 )
                 file.parentFile.mkdirs()
-                bytes.clone().inputStream().copyTo(file.outputStream())
+                bytes.clone().inputStream().use { `in` ->
+                    file.outputStream().use { out ->
+                        `in`.copyTo(out)
+                    }
+                }
             }
         }
     } catch (t: Throwable) {
         throw RuntimeException("Failed to load jar: $modName", t)
     }
 }
-
 
 fun getModVersion(modName: String, inputStream: InputStream): String? {
     val zip = ZipInputStream(inputStream)
