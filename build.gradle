@@ -1,6 +1,5 @@
 plugins {
     id 'java-library'
-    id 'org.jetbrains.kotlin.jvm' version '1.3.70'
     id "maven-publish"
 }
 
@@ -8,7 +7,7 @@ sourceCompatibility = targetCompatibility = 1.8
 
 group = "me.shedaniel"
 archivesBaseName = "modpacks-flattener"
-version = "0.2.4"
+version = "0.3.0"
 
 repositories {
     jcenter()
@@ -16,24 +15,17 @@ repositories {
 }
 
 dependencies {
-    compile("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.3.70")
     compile("commons-io:commons-io:2.6")
     compile("net.fabricmc:fabric-loader:+")
     compile("com.google.code.gson:gson:2.8.6")
     compile("org.apache.commons:commons-lang3:3.9")
 }
 
-compileKotlin {
-    kotlinOptions {
-        jvmTarget = "1.8"
-    }
-}
-
 jar {
     from ".modpacks-flatter-exclude"
     manifest {
         attributes(
-                'Main-Class': 'me.shedaniel.modflattener.MainKt'
+                'Main-Class': 'me.shedaniel.modflattener.Main'
         )
     }
     from {

@@ -2,6 +2,7 @@
 /.gradle
 /build
 /out
+/yes
 *.iml
 *.ipr
 *.ips
